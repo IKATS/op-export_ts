@@ -18,7 +18,7 @@
       "description": "pattern used to build the destination tree",
       "type": "text",
       "label": "Destination tree pattern",
-      "default_value": "/{ds_name}/{fid}.csv"
+      "default_value": "/{ds}/{fid}.csv"
     }
   ],
   "outputs": [
