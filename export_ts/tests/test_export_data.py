@@ -13,20 +13,16 @@ import logging
 from ikats.core.resource.api import IkatsApi
 from ikats.algo.export_ts.export_ts import export_ts, get_metadata, LOGGER
 
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("ikats.core.resource.client.rest_client").setLevel(logging.WARNING)
-FileMetric = namedtuple('FileMetric', 'tsuid dir_count file_count max_files files')
-
 
 def log_to_stdout(logger_to_use):
     """
     Allow to print some loggers to stdout
+
     :param logger_to_use: the LOGGER object to redirect to stdout
     """
 
     logger_to_use.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s:%(message)s')
-    # Create another handler that will redirect log entries to STDOUT
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.DEBUG)
     stream_handler.setFormatter(formatter)
@@ -78,10 +74,6 @@ def get_csv_length(path):
         return len(list(filename.readlines()))
 
 
-# Prints the logger to display
-log_to_stdout(LOGGER)
-
-
 def cleanup_folder(path):
     """
     This method removes the path and its content from disk
@@ -93,6 +85,14 @@ def cleanup_folder(path):
         LOGGER.warning("Path %s not removed", path)
     else:
         LOGGER.debug("Path %s removed", path)
+
+
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("ikats.core.resource.client.rest_client").setLevel(logging.WARNING)
+FileMetric = namedtuple('FileMetric', 'tsuid dir_count file_count max_files files')
+
+# Prints the logger to display
+log_to_stdout(LOGGER)
 
 
 class TestExportTS(TestCase):
@@ -224,8 +224,6 @@ class TestExportTS(TestCase):
 
         all_paths = {}
 
-        LOGGER.debug(self.portfolio_metadata)
-
         for metadata in self.portfolio_metadata:
 
             try:
@@ -238,7 +236,6 @@ class TestExportTS(TestCase):
                 raise
 
         for path, md in all_paths.items():
-            LOGGER.debug("Path to find: " + path)
             self.assertEqual(path in all_paths.keys(), True)
             self.assertEqual(get_csv_length("%s/%s" % (root_path, path)), int(md['qual_nb_points']) + 1)
 

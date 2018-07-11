@@ -1,10 +1,12 @@
 # op-export_ts
 
-This operator allow to export a dataset to as set of CSV files ([see format below](#CSVformat).
+This operator allow to export a dataset to as set of CSV files ([see format below](#CSVformat) following a defined [path pattern](#Patternformat).
 
 The directory tree can be customized to define the name of the folders, subfolders and filenames based on timeseries metadata.
 
-## Input and parameters
+## Overview
+
+### Input and parameters
 
 The operator takes 1 input:
 
@@ -12,15 +14,17 @@ The operator takes 1 input:
 
 It also takes 1 parameter from the user:
 
-* **Pattern**: The path pattern used to build the directory tree ()
+* **Pattern**: The path pattern used to build the directory tree ([see pattern format below](#Patternformat)).
 
-## Outputs
+### Outputs
 
 The operator has 1 Output:
 
-* **Path**: String indicating where the CSV files are located on disk
+* **Path**: String indicating where the CSV files are located on container disk.
 
-## Pattern format
+## Details
+
+### Pattern format
 
 The path pattern is a string containing placeholders for specific metadata.
 
@@ -32,16 +36,21 @@ As an example, you could create a directory tree where:
 * the second level is the maximum value of the timeseries
 * the filename is composed of a `city` and `rank` metadata
 
-The corresponding pattern could be: `/{qual_nb_points}/{max_value}/{city}_{rank}.csv`
+The corresponding pattern could be: `{qual_nb_points}/{max_value}/{city}_{rank}.csv`
 
 Reserved keywords are:
 
 * `{fid}` for the functional identifier (the displayed name of the timeseries)
-* `{ds}` for the name of the dataset (specified as input)
+* `{DSname}` for the name of the dataset (specified as input)
 
-## CSV format
+### CSV format
 
 The CSV format is composed of 2 columns delimited by the character `;`:
 
 * Date (ISO-8601) (eg. 2018-01-01 12:34:56.789)
 * Value (float)
+
+### Limitations
+
+* If the given *path pattern* produces 2 or more identical file path, the export is aborted.
+* If the given *path pattern* can't be produced due to unknown metadata, the following pattern is used as fallback `{fid}.csv`

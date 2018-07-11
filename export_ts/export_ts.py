@@ -20,7 +20,7 @@ import shutil
 from functools import partial
 import os
 import time
-import uuid
+import datetime
 from multiprocessing import Pool
 
 from ikats.core.library.exception import IkatsException
@@ -29,12 +29,12 @@ from ikats.core.resource.api import IkatsApi
 LOGGER = logging.getLogger(__name__)
 
 # Fallback pattern used when error occurred during placeholders replacement in pattern
-FALLBACK_PATTERN = '/{fid}.csv'
+FALLBACK_PATTERN = '{fid}.csv'
 
 
 def export_ts(ds_name, pattern):
     """
-    Tool to export all timeseries in a dataset to CSV files (one file per TS)
+    Operator to export all timeseries(TS) contained in a dataset to CSV files (one file per TS)
     User provides a pattern that use python string format to decide the relative path for each timeseries
     Destination path is prepended to the relative path to create an absolute path
 
@@ -44,15 +44,18 @@ def export_ts(ds_name, pattern):
     :type ds_name: str
     :type pattern: str
 
-    :return: status
+    :return: the absolute path where the result is located
     :rtype: str
     """
 
+    # Absolute path prepended to the relative path to create an absolute path
     destination_path = os.environ.get('TSDATA')
+
+    # Trigger a time counter to estimate the elapsed time
     start_time = time.time()
 
-    # Output path is unique thanks to uuid
-    out_path = "%s/%s" % (destination_path, str(uuid.uuid4()))
+    # Output path is build unique
+    out_path = "/".join([destination_path, "export", datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")])
 
     # Checks for permission to write to folder
     # Only needed for folders that exist already
@@ -61,7 +64,8 @@ def export_ts(ds_name, pattern):
             LOGGER.warning("Permission denied:" + destination_path)
             raise PermissionError("Permission denied:" + destination_path)
 
-    ts_list = IkatsApi.ds.read(ds_name)['ts_list']
+    # Get the TS list from the dataset
+    ts_list = IkatsApi.ds.read(ds_name=ds_name)['ts_list']
 
     # Note: Datasets that do not exist return empty lists
     if not ts_list:
@@ -92,8 +96,8 @@ def export_ts(ds_name, pattern):
 
 def get_metadata(tsuid, pattern):
     """
-    Get metadata from md api
-    If fid is in the user provided pattern add that to metadata
+    Get metadata from metadata api
+    If `fid` is in the user provided pattern add that to metadata
 
     :param tsuid: TSUID to get metadata from IKATS
     :param pattern: Pattern containing the metadata keys we will need
@@ -101,7 +105,7 @@ def get_metadata(tsuid, pattern):
     :type tsuid: str
     :type pattern: str
 
-    :return: the metadata list
+    :return: the metadata list for this timeseries
     :rtype dict
     """
     metadata = IkatsApi.md.read(tsuid)[tsuid]
@@ -112,7 +116,7 @@ def get_metadata(tsuid, pattern):
     return metadata
 
 
-def create_directory(pattern, destination_path, tsuid):
+def create_directory(pattern, destination_path):
     """
     Creates, if needed, the directory where the resulting CSV will be generated
 
@@ -193,7 +197,7 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
     :type destination_path: str
     :type pattern: str
     """
-    LOGGER.debug("Starting ETS for %s process by acquiring Metadata", tsuid)
+    LOGGER.info("Exporting %s", tsuid)
     metadata = get_metadata(tsuid=tsuid, pattern=pattern)
     metadata["ds"] = ds_name
 
@@ -203,5 +207,5 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
         LOGGER.warning("Key not found in pattern for %s, using Fallback pattern. %s", metadata["fid"], ex)
         filled_pattern = FALLBACK_PATTERN.format(**metadata)
 
-    path = create_directory(destination_path=destination_path, pattern=filled_pattern, tsuid=tsuid)
+    path = create_directory(destination_path=destination_path, pattern=filled_pattern)
     fetch_and_write_time_series(path=path, tsuid=tsuid)
