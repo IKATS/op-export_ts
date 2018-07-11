@@ -45,7 +45,7 @@ def export_ts(ds_name, pattern):
     :type pattern: str
 
     :return: status
-    :rtype: dict
+    :rtype: str
     """
 
     destination_path = os.environ.get('TSDATA')
@@ -81,12 +81,13 @@ def export_ts(ds_name, pattern):
     # Elapsed time in milliseconds
     time_elapsed = time.time() - start_time
 
-    return {
+    LOGGER.debug("Results: ", {
         "path": out_path,
         "ts_count": len(ts_list),
         "points_count": total_points_in_all_ts,
         "duration": time_elapsed
-    }
+    })
+    return out_path
 
 
 def get_metadata(tsuid, pattern):

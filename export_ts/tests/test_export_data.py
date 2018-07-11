@@ -10,7 +10,6 @@ from collections import namedtuple
 
 import logging
 
-
 from ikats.core.resource.api import IkatsApi
 from ikats.algo.export_ts.export_ts import export_ts, get_metadata, LOGGER
 
@@ -111,17 +110,15 @@ class TestExportTS(TestCase):
         Single-process version
         """
         pattern = "{metric}/{fid}.csv"
-        status = export_ts(ds_name="Portfolio", pattern=pattern)
+        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
 
-        LOGGER.debug(status)
-
-        fm = count_dirs_and_files(status['path'])
-        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+        fm = count_dirs_and_files(csv_output_path)
+        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
             "dir_count": len(self.portfolio_tsuids),
             "file_count": len(self.portfolio_tsuids),
             "max_files": 1
         })
-        cleanup_folder(status['path'])
+        cleanup_folder(csv_output_path)
 
     def test_no_folder(self):
         """
@@ -129,17 +126,15 @@ class TestExportTS(TestCase):
         """
         pattern = "{fid}.csv"
 
-        status = export_ts(ds_name="Portfolio", pattern=pattern)
+        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
 
-        LOGGER.debug(status)
-
-        fm = count_dirs_and_files(status['path'])
-        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+        fm = count_dirs_and_files(csv_output_path)
+        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
             "dir_count": 0,
             "file_count": len(self.portfolio_tsuids),
             "max_files": len(self.portfolio_tsuids)
         })
-        cleanup_folder(status['path'])
+        cleanup_folder(csv_output_path)
 
     def test_single_folder(self):
         """
@@ -147,17 +142,15 @@ class TestExportTS(TestCase):
         """
         pattern = "{qual_nb_points}/{fid}.csv"
 
-        status = export_ts(ds_name="Portfolio", pattern=pattern)
+        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
 
-        LOGGER.debug(status)
-
-        fm = count_dirs_and_files(status['path'])
-        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+        fm = count_dirs_and_files(csv_output_path)
+        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
             "dir_count": 1,
             "file_count": len(self.portfolio_tsuids),
             "max_files": len(self.portfolio_tsuids)
         })
-        cleanup_folder(status['path'])
+        cleanup_folder(csv_output_path)
 
     def test_pattern_clashes_csv(self):
         """
@@ -169,9 +162,9 @@ class TestExportTS(TestCase):
         pattern = "/{ds}.csv"
 
         with self.assertRaises(ValueError):
-            status = export_ts(ds_name="Portfolio", pattern=pattern)
-            fm = count_dirs_and_files(status['path'])
-            self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+            csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
+            fm = count_dirs_and_files(csv_output_path)
+            self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
                 "dir_count": 0,
                 "file_count": len(self.portfolio_tsuids),
                 "max_files": len(self.portfolio_tsuids)
