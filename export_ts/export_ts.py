@@ -19,13 +19,18 @@ import logging
 from functools import partial
 import os
 import time
+import uuid
 from multiprocessing import Pool
 from ikats.core.resource.api import IkatsApi
 
 LOGGER = logging.getLogger(__name__)
+DESTINATION_PATH = os.environ.get('TSDATA', '/tmp/export_data')
+
+# Fallback pattern used when error occurred during placeholders replacement in pattern
+FALLBACK_PATTERN = '/{fid}.csv'
 
 
-def export_ts(ds_name, pattern, destination_path=None, multi_process=True, ok_to_overwrite=False):
+def export_ts(ds_name, pattern):
     """
     Tool to export all timeseries in a dataset to CSV files (one file per TS)
     User provides a pattern that use python string format to decide the relative path for each timeseries
@@ -33,15 +38,9 @@ def export_ts(ds_name, pattern, destination_path=None, multi_process=True, ok_to
 
     :param ds_name: Name of the dataset to export
     :param pattern: pattern used to build the destination tree
-    :param destination_path: location of the result
-    :param multi_process: Flag activating the multi-processing (True, default) or single processing (False)
-    :param ok_to_overwrite: Flag allowing to overwrite if results already exist (True), or not (False, default)
 
     :type ds_name: str
     :type pattern: str
-    :type destination_path: str
-    :type multi_process: bool
-    :param ok_to_overwrite: bool
 
     :return: status
     :rtype: dict
@@ -49,39 +48,15 @@ def export_ts(ds_name, pattern, destination_path=None, multi_process=True, ok_to
 
     start_time = time.time()
 
-    if not destination_path:
-        destination_path = "/tmp/" + ds_name.lower()
-        LOGGER.debug("Setting new destination path " + destination_path)
-
-    # If user already has files in folder and does not want to overwrite
-    # We need to keep track.
-    preexisting_files = set()
+    # Output path is unique thanks to uuid
+    out_path = "%s/%s" % (DESTINATION_PATH, str(uuid.uuid4()))
 
     # Checks for permission to write to folder
     # Only needed for folders that exist already
-    if os.path.isdir(destination_path):
-        if not os.access(destination_path, os.W_OK):
-            LOGGER.warning("Permission denied:" + destination_path)
-            raise PermissionError("Permission denied:" + destination_path)
-        if os.listdir(destination_path) is not None:
-            if not ok_to_overwrite:
-                LOGGER.warning(
-                    "Writing to non-empty directory " + destination_path)
-                LOGGER.warning(" ".join(
-                    [destination_path, " contains " + ", ".join(os.listdir(destination_path))]))
-                raise ValueError(
-                    "Attempting to write to a non-empty directory " + destination_path)
-            else:
-                for root, _, files in os.walk(destination_path):
-                    preexisting_files.update(
-                        os.path.join(root, f) for f in files)
-
-    else:
-        if not destination_path.startswith("/"):
-            LOGGER.warning(
-                "Destination Path must start with /. Given: %s:", destination_path)
-            raise ValueError(
-                "Destination Path must start with /. Given: %s:", destination_path)
+    if os.path.isdir(DESTINATION_PATH):
+        if not os.access(DESTINATION_PATH, os.W_OK):
+            LOGGER.warning("Permission denied:" + DESTINATION_PATH)
+            raise PermissionError("Permission denied:" + DESTINATION_PATH)
 
     ts_list = IkatsApi.ds.read(ds_name)['ts_list']
 
@@ -90,30 +65,22 @@ def export_ts(ds_name, pattern, destination_path=None, multi_process=True, ok_to
         LOGGER.info("Empty dataset %s or does not exist", ds_name)
         return
 
-    LOGGER.debug("%s datasets found", len(ts_list))
+    LOGGER.debug("%s timeseries found in %s", len(ts_list), ds_name)
 
-    if multi_process:
+    partial_export = partial(export_time_series, ds_name=ds_name, destination_path=out_path, pattern=pattern)
 
-        partial_export = partial(export_time_series, destination_path=destination_path,
-                                 pattern=pattern, preexisting_files=preexisting_files,
-                                 ok_to_overwrite=ok_to_overwrite)
+    pool = Pool(processes=min(len(ts_list), os.cpu_count()))
 
-        pool = Pool(processes=min(len(ts_list), os.cpu_count()))
+    pool.map(partial_export, ts_list)
 
-        pool.map(partial_export, ts_list)
-    else:
-        for tsuid in ts_list:
-            export_time_series(destination_path=destination_path, pattern=pattern,
-                               tsuid=tsuid, preexisting_files=preexisting_files,
-                               ok_to_overwrite=ok_to_overwrite)
+    total_points_in_all_ts = sum(int(metadata['qual_nb_points']) for metadata in IkatsApi.md.read(ts_list).values())
 
-    ts_processed = len(ts_list)
-    total_points_in_all_ts = sum(int(
-        metadata['qual_nb_points']) for metadata in IkatsApi.md.read(ts_list).values())
+    # Elapsed time in milliseconds
     time_elapsed = time.time() - start_time
 
     return {
-        "ts_count": ts_processed,
+        "path": out_path,
+        "ts_count": len(ts_list),
         "points_count": total_points_in_all_ts,
         "duration": time_elapsed
     }
@@ -124,7 +91,7 @@ def get_metadata(tsuid, pattern):
     Get metadata from md api
     If fid is in the user provided pattern add that to metadata
 
-    :param tsuid: TSUID to get metadata from Ikats
+    :param tsuid: TSUID to get metadata from IKATS
     :param pattern: Pattern containing the metadata keys we will need
 
     :type tsuid: str
@@ -141,19 +108,15 @@ def get_metadata(tsuid, pattern):
     return metadata
 
 
-def create_directory(pattern, destination_path, preexisting_files=set(), ok_to_overwrite=False):
+def create_directory(pattern, destination_path):
     """
     Creates, if needed, the directory where the resulting CSV will be generated
 
     :param pattern: Path pattern to use for generating the files
     :param destination_path: Root directory from which to create the directory tree
-    :param preexisting_files: List of existing files to keep
-    :param ok_to_overwrite: Set to True to overwrite data if path exists (False is default)
 
     :type pattern: str
     :type destination_path: str
-    :type preexisting_files: set
-    :type ok_to_overwrite: bool
 
     :return: The created path
     :rtype: str
@@ -162,12 +125,9 @@ def create_directory(pattern, destination_path, preexisting_files=set(), ok_to_o
     path = "/".join([destination_path, pattern])
     path = path.replace("//", "/")
 
-    LOGGER.debug(path + " exists? " + str(os.path.exists(path)))
-
     if os.path.exists(path):
-        if path not in preexisting_files or not ok_to_overwrite:
-            LOGGER.warning("File already exists" + path)
-            raise ValueError("File already exists" + path)
+        LOGGER.warning("File already exists" + path)
+        raise ValueError("File already exists" + path)
 
     directory = os.path.split(path)[0]
 
@@ -185,7 +145,7 @@ def create_directory(pattern, destination_path, preexisting_files=set(), ok_to_o
 
 def fetch_and_write_time_series(path, tsuid):
     """
-    Read the timeseries from Ikats API
+    Read the timeseries from IKATS API
     Convert first column to numpy datetime 64
     Write each timestamp, value to the file followed by a newline
 
@@ -197,40 +157,48 @@ def fetch_and_write_time_series(path, tsuid):
     """
 
     time_series = IkatsApi.ts.read(tsuid)[0]
-    zipped_ts = zip(time_series[:, 0].astype(
-        'datetime64[ms]'), time_series[:, 1])
+    if len(time_series):
+        zipped_ts = zip(time_series[:, 0].astype('datetime64[ms]'), time_series[:, 1])
 
-    with open(path, 'w') as filename:
-        filename.write("Date;Value\n")
+        with open(path, 'w') as filename:
+            filename.write("Date;Value\n")
 
-        for timestamp, value in zipped_ts:
-            filename.write(";".join([str(timestamp), str(value)]))
-            filename.write("\n")
+            for timestamp, value in zipped_ts:
+                filename.write(";".join([str(timestamp), str(value)]) + "\n")
 
-    LOGGER.debug("Timeseries %s exported", tsuid)
+        LOGGER.debug("Timeseries %s exported", tsuid)
+    else:
+        LOGGER.warning("Timeseries %s is empty", tsuid)
 
 
-def export_time_series(tsuid, destination_path, pattern, preexisting_files, ok_to_overwrite):
+def export_time_series(tsuid, ds_name, destination_path, pattern):
     """
 
     :param tsuid: the tsuid that identifies the series
+    :param ds_name: Dataset name to be used as placeholder 'ds' in output path
     :param destination_path: absolute folder to write CSV's
     :param pattern: use python format to create relative path (from destination_path)
     to write CSV's
-    :param preexisting_files: set of files path that the were already in the user's folder
-    :param ok_to_overwrite: can previous timeseries be overwritten
 
     :type tsuid: str
+    :type ds_name: str
     :type destination_path: str
     :type pattern: str
-    :type preexisting_files: set
-    :type ok_to_overwrite: bool
     """
     LOGGER.debug("Starting ETS for %s process by acquiring Metadata", tsuid)
     metadata = get_metadata(tsuid=tsuid, pattern=pattern)
+    metadata["ds"] = ds_name
 
-    path = create_directory(destination_path=destination_path,
-                            pattern=pattern.format(**metadata),
-                            preexisting_files=preexisting_files,
-                            ok_to_overwrite=ok_to_overwrite)
+    try:
+        filled_pattern = pattern.format(**metadata)
+    except KeyError as ex:
+        LOGGER.warning("Key not found in pattern for %s, using Fallback pattern. %s", metadata["fid"], ex)
+        filled_pattern = FALLBACK_PATTERN.format(**metadata)
+
+    path = create_directory(destination_path=destination_path, pattern=filled_pattern)
     fetch_and_write_time_series(path=path, tsuid=tsuid)
+
+
+# status = export_ts(ds_name="Portfolio", pattern="{ds}/{fid}.csv")
+# print(status)
+# print(__name__)
