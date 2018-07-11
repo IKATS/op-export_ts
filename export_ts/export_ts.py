@@ -16,15 +16,17 @@ limitations under the License.
 """
 
 import logging
+import shutil
 from functools import partial
 import os
 import time
 import uuid
 from multiprocessing import Pool
+
+from ikats.core.library.exception import IkatsException
 from ikats.core.resource.api import IkatsApi
 
 LOGGER = logging.getLogger(__name__)
-DESTINATION_PATH = os.environ.get('TSDATA', '/tmp/export_data')
 
 # Fallback pattern used when error occurred during placeholders replacement in pattern
 FALLBACK_PATTERN = '/{fid}.csv'
@@ -46,24 +48,25 @@ def export_ts(ds_name, pattern):
     :rtype: dict
     """
 
+    destination_path = os.environ.get('TSDATA')
     start_time = time.time()
 
     # Output path is unique thanks to uuid
-    out_path = "%s/%s" % (DESTINATION_PATH, str(uuid.uuid4()))
+    out_path = "%s/%s" % (destination_path, str(uuid.uuid4()))
 
     # Checks for permission to write to folder
     # Only needed for folders that exist already
-    if os.path.isdir(DESTINATION_PATH):
-        if not os.access(DESTINATION_PATH, os.W_OK):
-            LOGGER.warning("Permission denied:" + DESTINATION_PATH)
-            raise PermissionError("Permission denied:" + DESTINATION_PATH)
+    if os.path.isdir(destination_path):
+        if not os.access(destination_path, os.W_OK):
+            LOGGER.warning("Permission denied:" + destination_path)
+            raise PermissionError("Permission denied:" + destination_path)
 
     ts_list = IkatsApi.ds.read(ds_name)['ts_list']
 
     # Note: Datasets that do not exist return empty lists
     if not ts_list:
         LOGGER.info("Empty dataset %s or does not exist", ds_name)
-        return
+        raise IkatsException("Empty dataset %s or does not exist" % ds_name)
 
     LOGGER.debug("%s timeseries found in %s", len(ts_list), ds_name)
 
@@ -108,7 +111,7 @@ def get_metadata(tsuid, pattern):
     return metadata
 
 
-def create_directory(pattern, destination_path):
+def create_directory(pattern, destination_path, tsuid):
     """
     Creates, if needed, the directory where the resulting CSV will be generated
 
@@ -122,12 +125,17 @@ def create_directory(pattern, destination_path):
     :rtype: str
     """
 
-    path = "/".join([destination_path, pattern])
-    path = path.replace("//", "/")
+    path = "/".join([destination_path, pattern]).replace("//", "/")
 
     if os.path.exists(path):
-        LOGGER.warning("File already exists" + path)
-        raise ValueError("File already exists" + path)
+        LOGGER.warning("Pattern produces identical CSV filename, abort")
+        LOGGER.debug("The filled pattern was %s", path)
+        try:
+            shutil.rmtree(destination_path)
+        except Exception:
+            LOGGER.warning("Path %s not removed", destination_path)
+        finally:
+            raise ValueError("Pattern produces identical CSV filename")
 
     directory = os.path.split(path)[0]
 
@@ -177,8 +185,7 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
     :param tsuid: the tsuid that identifies the series
     :param ds_name: Dataset name to be used as placeholder 'ds' in output path
     :param destination_path: absolute folder to write CSV's
-    :param pattern: use python format to create relative path (from destination_path)
-    to write CSV's
+    :param pattern: use python format to create relative path (from destination_path) to write CSV's
 
     :type tsuid: str
     :type ds_name: str
@@ -195,10 +202,5 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
         LOGGER.warning("Key not found in pattern for %s, using Fallback pattern. %s", metadata["fid"], ex)
         filled_pattern = FALLBACK_PATTERN.format(**metadata)
 
-    path = create_directory(destination_path=destination_path, pattern=filled_pattern)
+    path = create_directory(destination_path=destination_path, pattern=filled_pattern, tsuid=tsuid)
     fetch_and_write_time_series(path=path, tsuid=tsuid)
-
-
-# status = export_ts(ds_name="Portfolio", pattern="{ds}/{fid}.csv")
-# print(status)
-# print(__name__)

@@ -6,15 +6,17 @@ import shutil
 import unittest
 from unittest import TestCase
 
-from itertools import product
 from collections import namedtuple
 
 import logging
 
-from export_ts.export_ts import export_ts, get_metadata, create_directory, fetch_and_write_time_series, LOGGER
-from ikats.core.resource.api import IkatsApi
 
-FileMetric = namedtuple('FileMetric', 'tsuid dircount filecount maxfiles files')
+from ikats.core.resource.api import IkatsApi
+from ikats.algo.export_ts.export_ts import export_ts, get_metadata, LOGGER
+
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("ikats.core.resource.client.rest_client").setLevel(logging.WARNING)
+FileMetric = namedtuple('FileMetric', 'tsuid dir_count file_count max_files files')
 
 
 def log_to_stdout(logger_to_use):
@@ -55,7 +57,7 @@ def count_dirs_and_files(destination_path):
 
         all_files.extend(os.path.join(root, f) for f in files)
 
-    fm = FileMetric(tsuid=None, dircount=dir_count, filecount=file_count, maxfiles=max_files, files=all_files)
+    fm = FileMetric(tsuid=None, dir_count=dir_count, file_count=file_count, max_files=max_files, files=all_files)
 
     LOGGER.debug(fm)
 
@@ -72,6 +74,7 @@ def get_csv_length(path):
     :return: the number of lines in the csv
     :rtype: int
     """
+
     with open(path) as filename:
         return len(list(filename.readlines()))
 
@@ -82,210 +85,79 @@ log_to_stdout(LOGGER)
 
 def cleanup_folder(path):
     """
-    This method removes the path and its content from disk if the path is inside /tmp folder
-    :param path: path to remove
+    This method removes the path and its content from disk
+    :param path: path to remove relative to TSDATA
     """
     try:
-        if not path.startswith("/tmp"):
-            raise ValueError("You try to remove a path not in /tmp")
         shutil.rmtree(path)
     except Exception:
-        LOGGER.warning("Path %s not removed" % path)
+        LOGGER.warning("Path %s not removed", path)
     else:
-        LOGGER.debug("Path %s removed" % path)
+        LOGGER.debug("Path %s removed", path)
 
 
-class Testexport_ts(TestCase):
+class TestExportTS(TestCase):
     """
     Test of the export_ts package
     """
 
     def setUp(self):
+        os.environ["TSDATA"] = os.path.realpath("./tests_export")
         self.portfolio_tsuids = IkatsApi.ds.read("Portfolio")['ts_list']
         self.portfolio_metadata = [get_metadata(tsuid, '{fid}') for tsuid in self.portfolio_tsuids]
 
-    def test_export_multi_process(self):
-        """
-        Run multiprocess version
-        Portfolio dataset with folder for each fid => 14 folders 1 in each
-        """
-        pattern = "/{metric}/{fid}.csv"
-        destination = "/tmp/tests/test_write_multi"
-
-        cleanup_folder(destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                             multi_process=False, ok_to_overwrite=False)
-
-        LOGGER.debug(status)
-
-        fm = count_dirs_and_files(destination)
-        self.portfolio_compare(fm, pattern=destination + pattern)
-
-        cleanup_folder(destination)
-
-    def test_export_single_process(self):
+    def test_nominal(self):
         """
         Single-process version
         """
-        pattern = "/{metric}/{fid}.csv"
-        destination = "/tmp/tests/test_write_single"
-
-        cleanup_folder(destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                             multi_process=False, ok_to_overwrite=False)
+        pattern = "{metric}/{fid}.csv"
+        status = export_ts(ds_name="Portfolio", pattern=pattern)
 
         LOGGER.debug(status)
 
-        fm = count_dirs_and_files(destination)
-        self.portfolio_compare(fm, pattern=destination + pattern)
+        fm = count_dirs_and_files(status['path'])
+        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+            "dir_count": len(self.portfolio_tsuids),
+            "file_count": len(self.portfolio_tsuids),
+            "max_files": 1
+        })
+        cleanup_folder(status['path'])
 
-        cleanup_folder(destination)
-
-    def test_export_single_time_series(self):
+    def test_no_folder(self):
         """
-        Test getting a time series from a tsuid and writing to csv
-        Use portfolio dataset each of which has 48 points
-        Thus check if 48 + 1 for header lines in csv
-        One CSV file in per directory
+        All CSV written in the root directory
         """
-        pattern = "/{metric}/{fid}.csv"
-        destination = "/tmp/tests/test_write_individual"
+        pattern = "{fid}.csv"
 
-        cleanup_folder(destination)
-
-        for tsuid in self.portfolio_tsuids:
-            metadata = get_metadata(tsuid=tsuid, pattern=pattern)
-            filled_pattern = pattern.format(**metadata)
-            path = create_directory(destination_path=destination, pattern=filled_pattern, preexisting_files=set())
-            fetch_and_write_time_series(path=path, tsuid=tsuid)
-
-        fm = count_dirs_and_files(destination)
-        self.portfolio_compare(fm, pattern=destination + pattern)
-
-        cleanup_folder(destination)
-
-    def test_export_single_folder(self):
-        """
-        Single-process version
-        Multiple CSV files in a same directory
-        """
-        pattern = "/{qual_nb_points}/{fid}.csv"
-        destination = "/tmp/tests/test_write_single_folder"
-
-        cleanup_folder(destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                             multi_process=False, ok_to_overwrite=False)
+        status = export_ts(ds_name="Portfolio", pattern=pattern)
 
         LOGGER.debug(status)
 
-        fm = count_dirs_and_files(destination)
-        expected_fm = FileMetric(tsuid=None, filecount=14, dircount=1, maxfiles=14, files=[])
-        self.compare_file_metrics(obtained_fm=fm, expected_fm=expected_fm)
+        fm = count_dirs_and_files(status['path'])
+        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+            "dir_count": 0,
+            "file_count": len(self.portfolio_tsuids),
+            "max_files": len(self.portfolio_tsuids)
+        })
+        cleanup_folder(status['path'])
 
-        cleanup_folder(destination)
-
-    def test_default_destination(self):
+    def test_single_folder(self):
         """
-        Test that when no default destination is provided that /tmp/{ds_name} is used
+        All CSV written in a single directory
         """
-        pattern = "/{metric}/{fid}.csv"
-        default_destination = "/tmp/portfolio"
+        pattern = "{qual_nb_points}/{fid}.csv"
 
-        cleanup_folder(default_destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern,
-                             multi_process=False, ok_to_overwrite=False)
+        status = export_ts(ds_name="Portfolio", pattern=pattern)
 
         LOGGER.debug(status)
 
-        fm = count_dirs_and_files(default_destination)
-        self.portfolio_compare(fm, pattern=default_destination + pattern)
-
-        cleanup_folder(default_destination)
-
-    def test_malformed_destination_path(self):
-        """
-        If destination path does not begin with a forward slash raise a ValueError
-        """
-        with self.assertRaises(ValueError):
-            export_ts(ds_name="Portfolio", pattern="/error/(fid}.csv", destination_path="tmp/tests/malformed",
-                        multi_process=False, ok_to_overwrite=False)
-
-    def test_permission_denied_error(self):
-        """
-        if we do not have permission to write to a folder then raise a PermissionError
-        """
-        with self.assertRaises(PermissionError):
-            export_ts(ds_name="Portfolio", pattern="/error/(fid}.csv", destination_path="/root",
-                        multi_process=False, ok_to_overwrite=False)
-
-    def test_fail_to_overwrite(self):
-        """
-        Call twice to same folder. Second should fail because ok_to_overwrite is False
-        """
-        pattern = "/{qual_nb_points}/{fid}.csv"
-        destination = "/tmp/tests/test_fail_overwrite"
-
-        cleanup_folder(destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                             multi_process=False, ok_to_overwrite=False)
-
-        LOGGER.debug(status)
-        with self.assertRaises(ValueError):
-            export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination, multi_process=False)
-        cleanup_folder(destination)
-
-    def test_overwrite(self):
-        """
-        Call twice to same folder. If ok_to_overwrite=True should work
-        """
-        pattern = "/{qual_nb_points}/{fid}.csv"
-        destination = "/tmp/tests/test_success_overwrite"
-
-        cleanup_folder(destination)
-
-        status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                             multi_process=False, ok_to_overwrite=False)
-
-        LOGGER.debug(status)
-
-        export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                    multi_process=False, ok_to_overwrite=True)
-
-        cleanup_folder(destination)
-
-    def test_make_dirs_pattern_slash(self):
-        """
-        Test that multiple combinations of:
-            - patterns (with and w/o leading slash)
-            - destination paths (with and without trailing slash
-        can be combined
-        """
-
-        patterns = ["/{metric}/{fid}.csv", "{metric}/{fid}.csv"]
-        destinations = ["/tmp/tests/test_join", "/tmp/tests/test_join/"]
-
-        metadata_dict = {}
-
-        for pattern, destination, tsuid in product(patterns, destinations, self.portfolio_tsuids):
-
-            try:
-                metadata = metadata_dict.get((tsuid, pattern), None)
-
-                if metadata is None:
-                    metadata = get_metadata(tsuid=tsuid, pattern=pattern)
-                    metadata_dict[(tsuid, pattern)] = metadata
-
-                filled_pattern = pattern.format(**metadata)
-                create_directory(destination_path=destination, pattern=filled_pattern)
-            except Exception as e:
-                self.fail("Raised Exception unexpectedly!%s" % e)
-
-            cleanup_folder(destination)
+        fm = count_dirs_and_files(status['path'])
+        self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+            "dir_count": 1,
+            "file_count": len(self.portfolio_tsuids),
+            "max_files": len(self.portfolio_tsuids)
+        })
+        cleanup_folder(status['path'])
 
     def test_pattern_clashes_csv(self):
         """
@@ -294,16 +166,16 @@ class Testexport_ts(TestCase):
         they will all map to the same file.
         """
 
-        pattern = "/fid/{qual_nb_points}.csv"
-        destination = "/tmp/tests/test_clash_csv"
-        cleanup_folder(destination)
+        pattern = "/{ds}.csv"
 
         with self.assertRaises(ValueError):
-            status = export_ts(ds_name="Portfolio", pattern=pattern, destination_path=destination,
-                                 multi_process=False, ok_to_overwrite=True)
-            LOGGER.debug(status)
-
-        cleanup_folder(destination)
+            status = export_ts(ds_name="Portfolio", pattern=pattern)
+            fm = count_dirs_and_files(status['path'])
+            self.portfolio_compare(status['path'], fm, pattern=pattern, expected_values={
+                "dir_count": 0,
+                "file_count": len(self.portfolio_tsuids),
+                "max_files": len(self.portfolio_tsuids)
+            })
 
     def test_fid_in_md_if_requested(self):
         """
@@ -320,8 +192,7 @@ class Testexport_ts(TestCase):
         Raises key error if metadata not found (can't be expanded in pattern)
         """
         with self.assertRaises(KeyError):
-            export_ts(ds_name='Portfolio', pattern="/{unknown_metadata}/{unknown_metadata2}.csv",
-                        multi_process=False, ok_to_overwrite=True)
+            export_ts(ds_name='Portfolio', pattern="/{unknown_metadata}/{unknown_metadata2}.csv")
 
     def compare_file_metrics(self, expected_fm, obtained_fm):
         """
@@ -333,23 +204,28 @@ class Testexport_ts(TestCase):
         :type expected_fm: FileMetric
         :type obtained_fm: FileMetric
         """
-        self.assertEqual(expected_fm.filecount, obtained_fm.filecount)
-        self.assertEqual(expected_fm.dircount, obtained_fm.dircount)
-        self.assertEqual(expected_fm.maxfiles, obtained_fm.maxfiles)
+        self.assertEqual(expected_fm.file_count, obtained_fm.file_count)
+        self.assertEqual(expected_fm.dir_count, obtained_fm.dir_count)
+        self.assertEqual(expected_fm.max_files, obtained_fm.max_files)
 
-    def portfolio_compare(self, fm, pattern):
+    def portfolio_compare(self, root_path, fm, pattern, expected_values):
         """
         Common values for self.compare_file_metrics with portfolio dataset
 
+        :param root_path:
         :param fm:
         :param pattern:
+        :param expected_values:
 
+        :type root_path: str
         :type pattern: str
         :type fm: FileMetric
+        :type expected_values: dict
 
         """
-        expected_fm = FileMetric(tsuid=None, dircount=len(self.portfolio_tsuids), filecount=len(self.portfolio_tsuids),
-                                 maxfiles=1,
+        expected_fm = FileMetric(tsuid=None, dir_count=expected_values['dir_count'],
+                                 file_count=expected_values["file_count"],
+                                 max_files=expected_values["max_files"],
                                  files=[])
         self.compare_file_metrics(expected_fm, fm)
 
@@ -371,7 +247,7 @@ class Testexport_ts(TestCase):
         for path, md in all_paths.items():
             LOGGER.debug("Path to find: " + path)
             self.assertEqual(path in all_paths.keys(), True)
-            self.assertEqual(get_csv_length(path), int(md['qual_nb_points']) + 1)
+            self.assertEqual(get_csv_length("%s/%s" % (root_path, path)), int(md['qual_nb_points']) + 1)
 
 
 if __name__ == '__main__':
