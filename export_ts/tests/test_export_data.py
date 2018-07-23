@@ -12,6 +12,7 @@ import logging
 
 from ikats.core.resource.api import IkatsApi
 from ikats.algo.export_ts.export_ts import export_ts, get_metadata, LOGGER
+from ikats.core.resource.client.temporal_data_mgr import DTYPE
 
 
 def log_to_stdout(logger_to_use):
@@ -59,6 +60,22 @@ def count_dirs_and_files(destination_path):
     return fm
 
 
+def _gen_ts(fid, data):
+    try:
+        tsuid = IkatsApi.fid.tsuid(fid=fid)
+        IkatsApi.ts.delete(tsuid=tsuid, no_exception=True)
+    except ValueError:
+        # No TS to delete
+        pass
+
+    result = IkatsApi.ts.create(fid=fid, generate_metadata=True, data=data)
+    qual_nb_points = len(data)
+    qual_ref_period = (data[-1][0] - data[0][0]) / qual_nb_points
+    IkatsApi.md.create(tsuid=result['tsuid'], name="qual_ref_period", value=qual_ref_period, data_type=DTYPE.number)
+    IkatsApi.md.create(tsuid=result['tsuid'], name="qual_nb_points", value=qual_nb_points, data_type=DTYPE.number)
+    return result['tsuid']
+
+
 def get_csv_length(path):
     """
     Get the number of lines of the specified file
@@ -100,11 +117,69 @@ class TestExportTS(TestCase):
     Test of the export_ts package
     """
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         os.environ["TSDATA"] = os.path.realpath("./tests_export")
-        # Review#499 : you are not supposed to use real data !
-        self.portfolio_tsuids = IkatsApi.ds.read("Portfolio")['ts_list']
-        self.portfolio_metadata = [get_metadata(tsuid, '{fid}') for tsuid in self.portfolio_tsuids]
+
+        test_tsuid_list = [
+            _gen_ts(fid="FID_TS_1", data=[
+                [1e12, 5.0],
+                [1e12 + 1000, 6.2],
+                [1e12 + 2000, 6.0],
+                [1e12 + 3600, 8.0],
+                [1e12 + 4000, -15.0],
+                [1e12 + 5000, 2.0],
+                [1e12 + 6000, 6.0],
+                [1e12 + 7000, 3.0],
+                [1e12 + 8000, 2.0],
+                [1e12 + 9000, 42.0],
+                [1e12 + 10000, 8.0],
+                [1e12 + 11000, 8.0],
+                [1e12 + 12000, 8.0],
+                [1e12 + 13000, 8.0]
+            ]),
+            _gen_ts(fid="FID_TS_2", data=[
+                [1e12, 5.0],
+                [1e12 + 1000, 8.2],
+                [1e12 + 2000, 6.6],
+                [1e12 + 3600, -8.0],
+                [1e12 + 4000, -14.0],
+                [1e12 + 5000, 42.0],
+                [1e12 + 6000, 26.0],
+                [1e12 + 7000, 10023.0],
+                [1e12 + 8000, 22.0],
+                [1e12 + 9000, 42.0],
+                [1e12 + 10000, 8.587678],
+                [1e12 + 11000, 8.0],
+                [1e12 + 12000, 8.0],
+                [1e12 + 13000, 8.0]
+            ]),
+            _gen_ts(fid="FID_TS_3", data=[
+                [1e12, 5.10],
+                [1e12 + 1000, 8.2],
+                [1e12 + 2000, 6.6],
+                [1e12 + 3600, -8.0],
+                [1e12 + 4000, -14.0],
+                [1e12 + 5000, 42.2],
+                [1e12 + 6000, 26.0],
+                [1e12 + 7000, 10023.0],
+                [1e12 + 8000, 22.0],
+                [1e12 + 9000, 42.0],
+                [1e12 + 10000, 8.587678],
+                [1e12 + 11000, 8.0],
+                [1e12 + 12000, 8.7],
+                [1e12 + 13000, 8.0]
+            ]),
+        ]
+        IkatsApi.ds.create("TEST_EXPORT_DATA", description="Test dataset used for export_data operator",
+                           tsuid_list=test_tsuid_list)
+
+        cls.ds_test_tsuid_list = test_tsuid_list
+        cls.ds_test_metadata = [get_metadata(tsuid, '{fid}') for tsuid in cls.ds_test_tsuid_list]
+
+    @classmethod
+    def tearDownClass(cls):
+        IkatsApi.ds.delete(ds_name="TEST_EXPORT_DATA", deep=True)
 
     def test_no_folder(self):
         """
@@ -112,13 +187,13 @@ class TestExportTS(TestCase):
         """
         pattern = "{fid}.csv"
 
-        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
+        csv_output_path = export_ts(ds_name="TEST_EXPORT_DATA", pattern=pattern)
 
         fm = count_dirs_and_files(csv_output_path)
-        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
+        self.dataset_compare(csv_output_path, fm, pattern=pattern, expected_values={
             "dir_count": 0,
-            "file_count": len(self.portfolio_tsuids),
-            "max_files": len(self.portfolio_tsuids)
+            "file_count": len(self.ds_test_tsuid_list),
+            "max_files": len(self.ds_test_tsuid_list)
         })
         cleanup_folder(csv_output_path)
 
@@ -128,28 +203,40 @@ class TestExportTS(TestCase):
         """
         pattern = "{qual_nb_points}/{fid}.csv"
 
-        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
+        csv_output_path = export_ts(ds_name="TEST_EXPORT_DATA", pattern=pattern)
 
         fm = count_dirs_and_files(csv_output_path)
-        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
+        self.dataset_compare(csv_output_path, fm, pattern=pattern, expected_values={
             "dir_count": 1,
-            "file_count": len(self.portfolio_tsuids),
-            "max_files": len(self.portfolio_tsuids)
+            "file_count": len(self.ds_test_tsuid_list),
+            "max_files": len(self.ds_test_tsuid_list)
         })
         cleanup_folder(csv_output_path)
 
     def test_pattern_clashes_csv(self):
         """
-        A pattern might be legally formed but fail to provide a unique name
-        for each csv. Each Portfolio timeseries has 48 points so by using the pattern below
-        they will all map to the same file.
+        A pattern might be legally formed but fail to provide a unique name for each csv.
+        All time series will map to the same file.
         """
 
-        pattern = "/{ds}.csv"
+        pattern = "{DSname}.csv"
 
         with self.assertRaises(ValueError):
-            csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
+            export_ts(ds_name="TEST_EXPORT_DATA", pattern=pattern)
 
+    def test_incorrect_metadata(self):
+        """
+        Raises key error if metadata not found (can't be expanded in pattern)
+        """
+        pattern = "/{unknown_metadata}/{unknown_metadata2}.csv"
+        csv_output_path = export_ts(ds_name='TEST_EXPORT_DATA', pattern=pattern)
+        fm = count_dirs_and_files(csv_output_path)
+        self.dataset_compare(csv_output_path, fm, pattern="{fid}.csv", expected_values={
+            "dir_count": 0,
+            "file_count": len(self.ds_test_tsuid_list),
+            "max_files": len(self.ds_test_tsuid_list)
+        })
+        cleanup_folder(csv_output_path)
 
     def test_fid_in_md_if_requested(self):
         """
@@ -157,16 +244,9 @@ class TestExportTS(TestCase):
         """
         has_fid_pattern = "{fid}"
 
-        for tsuid in self.portfolio_tsuids:
+        for tsuid in self.ds_test_tsuid_list:
             metadata = get_metadata(tsuid, has_fid_pattern)
             self.assertTrue("fid" in metadata.keys())
-
-    def test_incorrect_metadata(self):
-        """
-        Raises key error if metadata not found (can't be expanded in pattern)
-        """
-        with self.assertRaises(KeyError):
-            export_ts(ds_name='Portfolio', pattern="/{unknown_metadata}/{unknown_metadata2}.csv")
 
     def compare_file_metrics(self, expected_fm, obtained_fm):
         """
@@ -182,9 +262,9 @@ class TestExportTS(TestCase):
         self.assertEqual(expected_fm.dir_count, obtained_fm.dir_count)
         self.assertEqual(expected_fm.max_files, obtained_fm.max_files)
 
-    def portfolio_compare(self, root_path, fm, pattern, expected_values):
+    def dataset_compare(self, root_path, fm, pattern, expected_values):
         """
-        Common values for self.compare_file_metrics with portfolio dataset
+        Common values for self.compare_file_metrics with TEST_EXPORT_DATA dataset
 
         :param root_path:
         :param fm:
@@ -205,7 +285,7 @@ class TestExportTS(TestCase):
 
         all_paths = {}
 
-        for metadata in self.portfolio_metadata:
+        for metadata in self.ds_test_metadata:
 
             try:
                 filled_pattern = pattern.format(**metadata)

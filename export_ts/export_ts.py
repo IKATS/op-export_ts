@@ -72,7 +72,23 @@ def export_ts(ds_name, pattern):
         LOGGER.info("Empty dataset %s or does not exist", ds_name)
         raise IkatsException("Empty dataset %s or does not exist" % ds_name)
 
-    LOGGER.debug("%s timeseries found in %s", len(ts_list), ds_name)
+    LOGGER.debug("%s time series found in %s", len(ts_list), ds_name)
+
+    md_list = IkatsApi.md.read(ts_list)
+
+    # Check that pattern is unique
+    filled_patterns = []
+    for tsuid in ts_list:
+        metadata = md_list[tsuid]
+        metadata["DSname"] = ds_name
+        metadata['fid'] = IkatsApi.ts.fid(tsuid)
+        try:
+            filled_pattern = pattern.format(**metadata)
+        except KeyError:
+            filled_pattern = FALLBACK_PATTERN.format(**metadata)
+        if filled_pattern in filled_patterns:
+            raise ValueError("The chosen pattern produces identical CSV filename %s", filled_pattern)
+        filled_patterns.append(filled_pattern)
 
     partial_export = partial(export_time_series, ds_name=ds_name, destination_path=out_path, pattern=pattern)
 
@@ -80,7 +96,7 @@ def export_ts(ds_name, pattern):
 
     pool.map(partial_export, ts_list)
 
-    total_points_in_all_ts = sum(int(metadata['qual_nb_points']) for metadata in IkatsApi.md.read(ts_list).values())
+    total_points_in_all_ts = sum(int(metadata['qual_nb_points']) for metadata in md_list.values())
 
     # Elapsed time in milliseconds
     time_elapsed = time.time() - start_time
@@ -110,8 +126,7 @@ def get_metadata(tsuid, pattern):
     """
     metadata = IkatsApi.md.read(tsuid)[tsuid]
 
-    if "{fid}" in pattern:
-        metadata['fid'] = IkatsApi.ts.fid(tsuid)
+    metadata['fid'] = IkatsApi.ts.fid(tsuid)
 
     return metadata
 
@@ -133,7 +148,7 @@ def create_directory(pattern, destination_path):
     path = "/".join([destination_path, pattern]).replace("//", "/")
 
     if os.path.exists(path):
-        LOGGER.warning("Pattern produces identical CSV filename, abort")
+        LOGGER.error("Pattern produces identical CSV filename, abort")
         LOGGER.debug("The filled pattern was %s", path)
         try:
             shutil.rmtree(destination_path)
@@ -172,10 +187,8 @@ def fetch_and_write_time_series(path, tsuid):
     time_series = IkatsApi.ts.read(tsuid)[0]
     if len(time_series):
         zipped_ts = zip(time_series[:, 0].astype('datetime64[ms]'), time_series[:, 1])
-
         with open(path, 'w') as filename:
             filename.write("Date;Value\n")
-
             for timestamp, value in zipped_ts:
                 filename.write(";".join([str(timestamp), str(value)]) + "\n")
 
@@ -199,7 +212,7 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
     """
     LOGGER.info("Exporting %s", tsuid)
     metadata = get_metadata(tsuid=tsuid, pattern=pattern)
-    metadata["ds"] = ds_name
+    metadata["DSname"] = ds_name
 
     try:
         filled_pattern = pattern.format(**metadata)
