@@ -35,7 +35,7 @@ FALLBACK_PATTERN = '{fid}.csv'
 def export_ts(ds_name, pattern):
     """
     Operator to export all timeseries(TS) contained in a dataset to CSV files (one file per TS)
-    User provides a pattern that use python string format to decide the relative path for each timeseries
+    User provides a pattern that uses python string format to describe the relative path for each timeseries
     Destination path is prepended to the relative path to create an absolute path
 
     :param ds_name: Name of the dataset to export
@@ -91,6 +91,7 @@ def export_ts(ds_name, pattern):
         "points_count": total_points_in_all_ts,
         "duration": time_elapsed
     })
+    # Review#499 : add a comment to out_path to explain that it is a path relative to mount directory
     return out_path
 
 

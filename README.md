@@ -1,6 +1,6 @@
 # op-export_ts
 
-This operator allow to export a dataset to as set of CSV files ([see format below](#CSVformat) following a defined [path pattern](#Patternformat).
+This operator allow to export a dataset to a set of CSV files ([see format below](#CSV-format) following a defined [path pattern](#Patternformat).
 
 The directory tree can be customized to define the name of the folders, subfolders and filenames based on timeseries metadata.
 
@@ -14,7 +14,7 @@ The operator takes 1 input:
 
 It also takes 1 parameter from the user:
 
-* **Pattern**: The path pattern used to build the directory tree ([see pattern format below](#Patternformat)).
+* **Pattern**: The path pattern used to build the directory tree ([see pattern format below](#Pattern-format)).
 
 ### Outputs
 
@@ -45,7 +45,8 @@ Reserved keywords are:
 
 ### CSV format
 
-The CSV format is composed of 2 columns delimited by the character `;`:
+The CSV format is composed of 2 columns delimited by the character `;`
+Columns :
 
 * Date (ISO-8601) (eg. 2018-01-01 12:34:56.789)
 * Value (float)

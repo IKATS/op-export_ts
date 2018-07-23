@@ -102,11 +102,13 @@ class TestExportTS(TestCase):
 
     def setUp(self):
         os.environ["TSDATA"] = os.path.realpath("./tests_export")
+        # Review#499 : you are not supposed to use real data !
         self.portfolio_tsuids = IkatsApi.ds.read("Portfolio")['ts_list']
         self.portfolio_metadata = [get_metadata(tsuid, '{fid}') for tsuid in self.portfolio_tsuids]
 
     def test_nominal(self):
         """
+        # Review#499 : why single process ?
         Single-process version
         """
         pattern = "{metric}/{fid}.csv"
@@ -163,6 +165,7 @@ class TestExportTS(TestCase):
 
         with self.assertRaises(ValueError):
             csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
+            # Review#499 : following lines useless because exception raised in export_ts above
             fm = count_dirs_and_files(csv_output_path)
             self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
                 "dir_count": 0,
