@@ -1,4 +1,3 @@
-# Review#499 : NOTICE file is missing
 {
   "name": "export_ts",
   "label": "Export TS",
@@ -16,8 +15,7 @@
   "parameters": [
     {
       "name": "pattern",
-# Review#499 : be more explicit on how to build this pattern (add an example with metadata) and what data it is composed with and where user can find and name these data in the pattern (metadata ?)
-      "description": "pattern used to build the destination tree",
+      "description": "pattern containing placeholders used to build the destination tree. Example: the placeholder `{qual_nb_points}` refers to the value of the `qual_nb_points` metadata.",
       "type": "text",
       "label": "Destination tree pattern",
       "default_value": "{DSname}/{fid}.csv"

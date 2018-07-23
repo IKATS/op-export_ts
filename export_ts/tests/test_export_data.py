@@ -106,22 +106,6 @@ class TestExportTS(TestCase):
         self.portfolio_tsuids = IkatsApi.ds.read("Portfolio")['ts_list']
         self.portfolio_metadata = [get_metadata(tsuid, '{fid}') for tsuid in self.portfolio_tsuids]
 
-    def test_nominal(self):
-        """
-        # Review#499 : why single process ?
-        Single-process version
-        """
-        pattern = "{metric}/{fid}.csv"
-        csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
-
-        fm = count_dirs_and_files(csv_output_path)
-        self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
-            "dir_count": len(self.portfolio_tsuids),
-            "file_count": len(self.portfolio_tsuids),
-            "max_files": 1
-        })
-        cleanup_folder(csv_output_path)
-
     def test_no_folder(self):
         """
         All CSV written in the root directory
@@ -165,13 +149,7 @@ class TestExportTS(TestCase):
 
         with self.assertRaises(ValueError):
             csv_output_path = export_ts(ds_name="Portfolio", pattern=pattern)
-            # Review#499 : following lines useless because exception raised in export_ts above
-            fm = count_dirs_and_files(csv_output_path)
-            self.portfolio_compare(csv_output_path, fm, pattern=pattern, expected_values={
-                "dir_count": 0,
-                "file_count": len(self.portfolio_tsuids),
-                "max_files": len(self.portfolio_tsuids)
-            })
+
 
     def test_fid_in_md_if_requested(self):
         """

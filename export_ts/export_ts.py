@@ -44,7 +44,7 @@ def export_ts(ds_name, pattern):
     :type ds_name: str
     :type pattern: str
 
-    :return: the absolute path where the result is located
+    :return: the path where the result is located relative to TSDATA environment variable
     :rtype: str
     """
 
@@ -91,7 +91,6 @@ def export_ts(ds_name, pattern):
         "points_count": total_points_in_all_ts,
         "duration": time_elapsed
     })
-    # Review#499 : add a comment to out_path to explain that it is a path relative to mount directory
     return out_path
 
 

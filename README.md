@@ -1,6 +1,6 @@
 # op-export_ts
 
-This operator allow to export a dataset to a set of CSV files ([see format below](#CSV-format) following a defined [path pattern](#Patternformat).
+This operator allow to export a dataset to a set of CSV files ([see format below](#CSV-format) following a defined [path pattern](#Pattern-format).
 
 The directory tree can be customized to define the name of the folders, subfolders and filenames based on timeseries metadata.
 
@@ -20,7 +20,7 @@ It also takes 1 parameter from the user:
 
 The operator has 1 Output:
 
-* **Path**: String indicating where the CSV files are located on container disk.
+* **Path**: String indicating where the CSV files are located on container disk relative to TSDATA environment variable
 
 ## Details
 
@@ -46,7 +46,7 @@ Reserved keywords are:
 ### CSV format
 
 The CSV format is composed of 2 columns delimited by the character `;`
-Columns :
+Columns:
 
 * Date (ISO-8601) (eg. 2018-01-01 12:34:56.789)
 * Value (float)
