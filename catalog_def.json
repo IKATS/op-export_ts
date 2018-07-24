@@ -15,7 +15,7 @@
   "parameters": [
     {
       "name": "pattern",
-      "description": "pattern containing placeholders used to build the destination tree. Example: the placeholder `{qual_nb_points}` refers to the value of the `qual_nb_points` metadata.",
+      "description": "pattern used to build the destination tree from metadata (2 more keywords {fid} and {DSname} are available). Example: `{DSname}/{qual_nb_points}/{fid}.csv`",
       "type": "text",
       "label": "Destination tree pattern",
       "default_value": "{DSname}/{fid}.csv"
