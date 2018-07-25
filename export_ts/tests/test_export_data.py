@@ -175,7 +175,7 @@ class TestExportTS(TestCase):
                            tsuid_list=test_tsuid_list)
 
         cls.ds_test_tsuid_list = test_tsuid_list
-        cls.ds_test_metadata = [get_metadata(tsuid, '{fid}') for tsuid in cls.ds_test_tsuid_list]
+        cls.ds_test_metadata = [get_metadata(tsuid) for tsuid in cls.ds_test_tsuid_list]
 
     @classmethod
     def tearDownClass(cls):
@@ -242,10 +242,8 @@ class TestExportTS(TestCase):
         """
         If 'fid' is requested in the pattern ensure it is in the keys of the metadata
         """
-        has_fid_pattern = "{fid}"
-
         for tsuid in self.ds_test_tsuid_list:
-            metadata = get_metadata(tsuid, has_fid_pattern)
+            metadata = get_metadata(tsuid)
             self.assertTrue("fid" in metadata.keys())
 
     def compare_file_metrics(self, expected_fm, obtained_fm):

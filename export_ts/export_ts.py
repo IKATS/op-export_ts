@@ -54,8 +54,9 @@ def export_ts(ds_name, pattern):
     # Trigger a time counter to estimate the elapsed time
     start_time = time.time()
 
-    # Output path is build unique
-    out_path = "/".join([destination_path, "export", datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")])
+    # Building output path to be unique
+    # Output path is a path relative to mount directory
+    out_path = "/".join(["export", datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")])
 
     # Checks for permission to write to folder
     # Only needed for folders that exist already
@@ -90,7 +91,10 @@ def export_ts(ds_name, pattern):
             raise ValueError("The chosen pattern produces identical CSV filename %s", filled_pattern)
         filled_patterns.append(filled_pattern)
 
-    partial_export = partial(export_time_series, ds_name=ds_name, destination_path=out_path, pattern=pattern)
+    partial_export = partial(export_time_series,
+                             ds_name=ds_name,
+                             destination_path="/".join([destination_path, out_path]),
+                             pattern=pattern)
 
     pool = Pool(processes=min(len(ts_list), os.cpu_count()))
 
@@ -107,20 +111,17 @@ def export_ts(ds_name, pattern):
         "points_count": total_points_in_all_ts,
         "duration": time_elapsed
     })
-    # Review#499 : add a comment to out_path to explain that it is a path relative to mount directory
     return out_path
 
 
-def get_metadata(tsuid, pattern):
+def get_metadata(tsuid):
     """
     Get metadata from metadata api
     If `fid` is in the user provided pattern add that to metadata
 
     :param tsuid: TSUID to get metadata from IKATS
-    :param pattern: Pattern containing the metadata keys we will need
 
     :type tsuid: str
-    :type pattern: str
 
     :return: the metadata list for this timeseries
     :rtype dict
@@ -212,7 +213,7 @@ def export_time_series(tsuid, ds_name, destination_path, pattern):
     :type pattern: str
     """
     LOGGER.info("Exporting %s", tsuid)
-    metadata = get_metadata(tsuid=tsuid, pattern=pattern)
+    metadata = get_metadata(tsuid=tsuid)
     metadata["DSname"] = ds_name
 
     try:
