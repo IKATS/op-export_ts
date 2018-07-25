@@ -1,0 +1,32 @@
+{
+  "name": "export_ts",
+  "label": "Export TS",
+  "description": "Exports Timeseries to a set CSV files in a specified directory tree",
+  "family": "Dataset Preparation__Import Export",
+  "entry_point": "export_ts.export_ts::export_ts",
+  "inputs": [
+    {
+      "name": "dsname",
+      "label": "DSname",
+      "description": "The name of the dataset to export",
+      "type": "ds_name"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "pattern",
+      "description": "pattern used to build the destination tree from metadata (2 more keywords {fid} and {DSname} are available). Example: `{DSname}/{qual_nb_points}/{fid}.csv`",
+      "type": "text",
+      "label": "Destination tree pattern",
+      "default_value": "{DSname}/{fid}.csv"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "path",
+      "label": "Path",
+      "description": "The path where the export has been generated",
+      "type": "text"
+    }
+  ]
+}
