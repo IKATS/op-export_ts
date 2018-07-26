@@ -1,0 +1,31 @@
+IKATS
+Copyright 2017-2018 CS Systèmes d'Information
+
+This product includes software developed by
+CS Systèmes d'Information (http://www.c-s.fr/)
+
+
+=================================================
+Massachusetts Institute of Technology License
+http://opensource.org/licenses/MIT
+=================================================
+
+The following components are provided under Massachusetts Institute of Technology License:
+
+    setuptools (33.1.1)
+    https://pypi.org/project/setuptools/
+
+    pycodestyle (2.0.0)
+    https://pypi.org/project/pycodestyle/
+
+    pyflakes (1.2.3)
+    https://pypi.org/project/pyflakes/
+
+=================================================
+  PSF License
+  https://docs.python.org/3/license.html
+=================================================
+
+The following components are provided under PSF Licenses :
+
+  Python (3.6.0)
