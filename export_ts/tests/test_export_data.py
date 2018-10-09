@@ -188,9 +188,10 @@ class TestExportTS(TestCase):
         pattern = "{fid}.csv"
 
         csv_output_path = export_ts(ds_name="TEST_EXPORT_DATA", pattern=pattern)
+        out_path = os.environ.get('TSDATA') + '/' + csv_output_path
 
-        fm = count_dirs_and_files(csv_output_path)
-        self.dataset_compare(csv_output_path, fm, pattern=pattern, expected_values={
+        fm = count_dirs_and_files(out_path)
+        self.dataset_compare(out_path, fm, pattern=pattern, expected_values={
             "dir_count": 0,
             "file_count": len(self.ds_test_tsuid_list),
             "max_files": len(self.ds_test_tsuid_list)
@@ -204,9 +205,10 @@ class TestExportTS(TestCase):
         pattern = "{qual_nb_points}/{fid}.csv"
 
         csv_output_path = export_ts(ds_name="TEST_EXPORT_DATA", pattern=pattern)
+        out_path = os.environ.get('TSDATA') + '/' + csv_output_path
 
-        fm = count_dirs_and_files(csv_output_path)
-        self.dataset_compare(csv_output_path, fm, pattern=pattern, expected_values={
+        fm = count_dirs_and_files(out_path)
+        self.dataset_compare(out_path, fm, pattern=pattern, expected_values={
             "dir_count": 1,
             "file_count": len(self.ds_test_tsuid_list),
             "max_files": len(self.ds_test_tsuid_list)
@@ -230,8 +232,10 @@ class TestExportTS(TestCase):
         """
         pattern = "/{unknown_metadata}/{unknown_metadata2}.csv"
         csv_output_path = export_ts(ds_name='TEST_EXPORT_DATA', pattern=pattern)
-        fm = count_dirs_and_files(csv_output_path)
-        self.dataset_compare(csv_output_path, fm, pattern="{fid}.csv", expected_values={
+        out_path = os.environ.get('TSDATA') + '/' + csv_output_path
+
+        fm = count_dirs_and_files(out_path)
+        self.dataset_compare(out_path, fm, pattern="{fid}.csv", expected_values={
             "dir_count": 0,
             "file_count": len(self.ds_test_tsuid_list),
             "max_files": len(self.ds_test_tsuid_list)
