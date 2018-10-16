@@ -2,7 +2,7 @@
   "name": "export_ts",
   "label": "Export TS",
   "description": "Exports Timeseries to a set CSV files in a specified directory tree",
-  "family": "Dataset Preparation__Import Export",
+  "family": "Dataset_Preparation__Import_Export",
   "entry_point": "export_ts.export_ts::export_ts",
   "inputs": [
     {
